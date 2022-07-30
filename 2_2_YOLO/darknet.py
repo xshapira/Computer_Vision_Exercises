@@ -22,14 +22,18 @@ class YoloLayer(nn.Module):
     def forward(self, output, nms_thresh):
         self.thresh = nms_thresh
         masked_anchors = []
-            
+
         for m in self.anchor_mask:
             masked_anchors += self.anchors[m*self.anchor_step:(m+1)*self.anchor_step]
-                
+
         masked_anchors = [anchor/self.stride for anchor in masked_anchors]
-        boxes = get_region_boxes(output.data, self.thresh, self.num_classes, masked_anchors, len(self.anchor_mask))
-            
-        return boxes
+        return get_region_boxes(
+            output.data,
+            self.thresh,
+            self.num_classes,
+            masked_anchors,
+            len(self.anchor_mask),
+        )
 
     
 class Upsample(nn.Module):
@@ -71,12 +75,12 @@ class Darknet(nn.Module):
         self.header = torch.IntTensor([0,0,0,0])
         self.seen = 0
 
-    def forward(self, x, nms_thresh):            
+    def forward(self, x, nms_thresh):        
         ind = -2
         self.loss = None
-        outputs = dict()
+        outputs = {}
         out_boxes = []
-        
+
         for block in self.blocks:
             ind = ind + 1
             if block['type'] == 'net':
@@ -107,8 +111,8 @@ class Darknet(nn.Module):
                 boxes = self.models[ind](x, nms_thresh)
                 out_boxes.append(boxes)
             else:
-                print('unknown type %s' % (block['type']))
-            
+                print(f"unknown type {block['type']}")
+
         return out_boxes
     
 
@@ -117,7 +121,7 @@ class Darknet(nn.Module):
 
     def create_network(self, blocks):
         models = nn.ModuleList()
-    
+
         prev_filters = 3
         out_filters =[]
         prev_stride = 1
@@ -190,19 +194,17 @@ class Darknet(nn.Module):
                 out_strides.append(prev_stride)
                 models.append(yolo_layer)
             else:
-                print('unknown type %s' % (block['type']))
-    
+                print(f"unknown type {block['type']}")
+
         return models
 
     def load_weights(self, weightfile):
         print()
-        fp = open(weightfile, 'rb')
-        header = np.fromfile(fp, count=5, dtype=np.int32)
-        self.header = torch.from_numpy(header)
-        self.seen = self.header[3]
-        buf = np.fromfile(fp, dtype = np.float32)
-        fp.close()
-
+        with open(weightfile, 'rb') as fp:
+            header = np.fromfile(fp, count=5, dtype=np.int32)
+            self.header = torch.from_numpy(header)
+            self.seen = self.header[3]
+            buf = np.fromfile(fp, dtype = np.float32)
         start = 0
         ind = -2
         counter = 3
@@ -225,11 +227,9 @@ class Darknet(nn.Module):
                 pass
             elif block['type'] == 'shortcut':
                 pass
-            elif block['type'] == 'yolo':
-                pass
-            else:
-                print('unknown type %s' % (block['type']))
-            
+            elif block['type'] != 'yolo':
+                print(f"unknown type {block['type']}")
+
             percent_comp = (counter / len(self.blocks)) * 100
 
             print('Loading weights. Please Wait...{:.2f}% Complete'.format(percent_comp), end = '\r', flush = True)
